@@ -1,6 +1,6 @@
-import { google } from '@ai-sdk/google';
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools';
+import { google } from '@ai-sdk/google'
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools'
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -13,9 +13,10 @@ export const weatherAgent = new Agent({
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
+      - Response is in Japanese
 
       Use the weatherTool to fetch current weather data.
 `,
-  model: google('gemini-1.5-pro-latest'),
+  model: google('gemini-2.0-flash'),
   tools: { weatherTool },
-});
+})
