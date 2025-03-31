@@ -1,9 +1,9 @@
-import { google } from '@ai-sdk/google';
-import { Agent } from '@mastra/core/agent';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { google } from '@ai-sdk/google'
+import { Agent } from '@mastra/core/agent'
+import { Step, Workflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
-const llm = google('gemini-1.5-pro-latest');
+const llm = google('gemini-2.0-flash')
 
 const agent = new Agent({
   name: 'Weather Agent',
@@ -48,10 +48,11 @@ const agent = new Agent({
         - Include specific venues, trails, or locations
         - Consider activity intensity based on temperature
         - Keep descriptions concise but informative
+        - Responses should be in Japanese
 
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
-});
+})
 
 const fetchWeather = new Step({
   id: 'fetch-weather',
@@ -60,48 +61,48 @@ const fetchWeather = new Step({
     city: z.string().describe('The city to get the weather for'),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ city: string }>('trigger');
+    const triggerData = context?.getStepResult<{ city: string }>('trigger')
 
     if (!triggerData) {
-      throw new Error('Trigger data not found');
+      throw new Error('Trigger data not found')
     }
 
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`
+    const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
+      results: { latitude: number; longitude: number; name: string }[]
+    }
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${triggerData.city}' not found`);
+      throw new Error(`Location '${triggerData.city}' not found`)
     }
 
-    const { latitude, longitude, name } = geocodingData.results[0];
+    const { latitude, longitude, name } = geocodingData.results[0]
 
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
-    const response = await fetch(weatherUrl);
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`
+    const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
       daily: {
-        time: string[];
-        temperature_2m_max: number[];
-        temperature_2m_min: number[];
-        precipitation_probability_mean: number[];
-        weathercode: number[];
-      };
-    };
+        time: string[]
+        temperature_2m_max: number[]
+        temperature_2m_min: number[]
+        precipitation_probability_mean: number[]
+        weathercode: number[]
+      }
+    }
 
     const forecast = data.daily.time.map((date: string, index: number) => ({
       date,
       maxTemp: data.daily.temperature_2m_max[index],
       minTemp: data.daily.temperature_2m_min[index],
       precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]!),
+      condition: getWeatherCondition(data.daily.weathercode[index]),
       location: name,
-    }));
+    }))
 
-    return forecast;
+    return forecast
   },
-});
+})
 
 const forecastSchema = z.array(
   z.object({
@@ -112,43 +113,42 @@ const forecastSchema = z.array(
     condition: z.string(),
     location: z.string(),
   }),
-);
+)
 
 const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
-  execute: async ({ context, mastra }) => {
-    const forecast =
-      context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
+  execute: async ({ context }) => {
+    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather')
 
     if (!forecast || forecast.length === 0) {
-      throw new Error('Forecast data not found');
+      throw new Error('Forecast data not found')
     }
 
     const prompt = `Based on the following weather forecast for ${forecast[0]?.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
-      `;
+      `
 
     const response = await agent.stream([
       {
         role: 'user',
         content: prompt,
       },
-    ]);
+    ])
 
-    let activitiesText = '';
+    let activitiesText = ''
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
+      process.stdout.write(chunk)
+      activitiesText += chunk
     }
 
     return {
       activities: activitiesText,
-    };
+    }
   },
-});
+})
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
@@ -168,8 +168,8 @@ function getWeatherCondition(code: number): string {
     73: 'Moderate snow fall',
     75: 'Heavy snow fall',
     95: 'Thunderstorm',
-  };
-  return conditions[code] || 'Unknown';
+  }
+  return conditions[code] || 'Unknown'
 }
 
 const weatherWorkflow = new Workflow({
@@ -179,8 +179,8 @@ const weatherWorkflow = new Workflow({
   }),
 })
   .step(fetchWeather)
-  .then(planActivities);
+  .then(planActivities)
 
-weatherWorkflow.commit();
+weatherWorkflow.commit()
 
-export { weatherWorkflow };
+export { weatherWorkflow }
